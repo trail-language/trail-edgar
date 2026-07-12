@@ -1,0 +1,58 @@
+[project]
+name = "trail-edgar"
+version = "0.1.0"
+description = "SEC EDGAR data source for Trail: normalized 10-K financial statements via edgartools"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Usman Shahid", email = "u.manshahid@gmail.com" }]
+keywords = ["finance", "sec", "edgar", "xbrl", "10-K", "trail", "financial-statements", "polars"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "trail-lang>=0.1",
+    "edgartools>=5.42,<6",
+    "polars>=1.20",
+]
+
+# Registers `driver: edgar` for trail.yaml once this package is installed.
+[project.entry-points."trail.sources"]
+edgar = "trail_edgar:EdgarSource"
+
+[project.urls]
+Homepage = "https://github.com/trail-language"
+Repository = "https://github.com/trail-language/trail-edgar"
+Issues = "https://github.com/trail-language/trail-edgar/issues"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.8", "pandas>=2.2"]
+
+# trail-lang's data-source adapter contract lives on the feat/source-adapter branch
+# until trail-language/trail-py PR #2 lands on the default branch. Repoint this to the
+# default branch (or drop it once trail-lang is published to PyPI with the contract).
+[tool.uv.sources]
+trail-lang = { git = "https://github.com/trail-language/trail-py", branch = "feat/source-adapter" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["trail_edgar"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: hits the live SEC EDGAR API (needs network and an identity)"]
+addopts = "-m 'not live'"
