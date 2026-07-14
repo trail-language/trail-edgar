@@ -1233,7 +1233,7 @@ dev = [
 requires-dist = [
     { name = "edgartools", specifier = ">=5.42,<6" },
     { name = "polars", specifier = ">=1.20" },
-    { name = "trail-lang", git = "https://github.com/trail-language/trail-py?branch=feat%2Fsource-adapter" },
+    { name = "trail-lang", git = "https://github.com/trail-language/trail-py?branch=main" },
 ]
 
 [package.metadata.requires-dev]
@@ -1246,7 +1246,7 @@ dev = [
 [[package]]
 name = "trail-lang"
 version = "0.1.0"
-source = { git = "https://github.com/trail-language/trail-py?branch=feat%2Fsource-adapter#de29a4dc7fd0d37ce35769c59b7facb8c4977095" }
+source = { git = "https://github.com/trail-language/trail-py?branch=main#be1a47ea2a85acd3d1e553a4fc9b4443afb0474a" }
 dependencies = [
     { name = "click" },
     { name = "lark" },
