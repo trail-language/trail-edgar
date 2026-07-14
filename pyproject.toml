@@ -36,11 +36,6 @@ Issues = "https://github.com/trail-language/trail-edgar/issues"
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.8", "pandas>=2.2"]
 
-# trail-lang is not yet on PyPI, so it is sourced from git (the default branch, which
-# carries the data-source adapter contract). Drop this block once trail-lang is published.
-[tool.uv.sources]
-trail-lang = { git = "https://github.com/trail-language/trail-py", branch = "main" }
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

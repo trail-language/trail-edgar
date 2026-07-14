@@ -1233,7 +1233,7 @@ dev = [
 requires-dist = [
     { name = "edgartools", specifier = ">=5.42,<6" },
     { name = "polars", specifier = ">=1.20" },
-    { name = "trail-lang", git = "https://github.com/trail-language/trail-py?branch=main" },
+    { name = "trail-lang", specifier = ">=0.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -1246,12 +1246,16 @@ dev = [
 [[package]]
 name = "trail-lang"
 version = "0.1.0"
-source = { git = "https://github.com/trail-language/trail-py?branch=main#be1a47ea2a85acd3d1e553a4fc9b4443afb0474a" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "lark" },
     { name = "polars" },
     { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/7f/7ae02461a2ab778172adc0f0a2c4ad689453f4ccaec97fbe7b8fc4c3abcf/trail_lang-0.1.0.tar.gz", hash = "sha256:f003ff6ab23b7ca9b55eaf9b51b0df691a12bdb876c269309a070d4ff48dcd09", size = 74119, upload-time = "2026-07-14T14:55:11.411Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/21/c138b88af047c84ba51779b0b14a668cea7fbe2d55bb414d0743b8ddbb22/trail_lang-0.1.0-py3-none-any.whl", hash = "sha256:90c5c07f9118ce3f5b5541b709f15b7a00998e3a8e798b2370e83a6ed3557d96", size = 36859, upload-time = "2026-07-14T14:55:10.143Z" },
 ]
 
 [[package]]
