@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "trail-lang>=0.1",
+    "trail-lang>=0.3",
     "edgartools>=5.42,<6",
     "polars>=1.20",
 ]

@@ -4,7 +4,7 @@ edgartools returns one pandas DataFrame per statement (income, balance, cash flo
 the us-gaap concept on the index and fiscal-year columns labelled like ``FY 2024``. We
 melt those into a ``{concept: {fiscal_year: value}}`` mapping (:func:`concepts_from_statements`),
 resolve each requested Trail field via :mod:`trail_edgar.mapping`, and pivot the result
-to a ``(security x period)`` polars panel (:func:`to_panel`). Pandas is only ever touched
+to a ``(entity x period)`` polars panel (:func:`to_panel`). Pandas is only ever touched
 through the passed-in frames; the output is pure polars.
 """
 from __future__ import annotations
@@ -56,7 +56,7 @@ def concepts_from_statements(statements) -> mapping.Concepts:
 
 
 def _panel_schema(numeric_fields: list[str], meta_fields: list[str]) -> dict:
-    schema: dict = {"security": pl.Utf8, "period": pl.Int32}
+    schema: dict = {"entity": pl.Utf8, "period": pl.Int32}
     for f in numeric_fields:
         schema[f] = pl.Float64
     for f in meta_fields:
@@ -64,12 +64,12 @@ def _panel_schema(numeric_fields: list[str], meta_fields: list[str]) -> dict:
     return schema
 
 
-def to_panel(per_security, fields: set[str]) -> pl.DataFrame:
-    """Assemble the panel from resolved per-security data.
+def to_panel(per_entity, fields: set[str]) -> pl.DataFrame:
+    """Assemble the panel from resolved per-entity data.
 
-    ``per_security`` is an iterable of ``(security, concepts, meta)`` where ``concepts``
-    is a :data:`mapping.Concepts` mapping and ``meta`` maps meta fields to per-security
-    constants. Returns a ``(security, period)`` panel restricted to ``fields`` (plus the
+    ``per_entity`` is an iterable of ``(entity, concepts, meta)`` where ``concepts``
+    is a :data:`mapping.Concepts` mapping and ``meta`` maps meta fields to per-entity
+    constants. Returns a ``(entity, period)`` panel restricted to ``fields`` (plus the
     two index columns), with an explicit schema so an empty result is still well typed.
     """
     numeric_fields = sorted(f for f in fields if f in mapping.PROVIDED_FIELDS
@@ -78,11 +78,11 @@ def to_panel(per_security, fields: set[str]) -> pl.DataFrame:
     schema = _panel_schema(numeric_fields, meta_fields)
     cols: dict[str, list] = {name: [] for name in schema}
 
-    for security, concepts, meta in per_security:
+    for entity, concepts, meta in per_entity:
         series = {f: mapping.resolve_field(f, concepts) for f in numeric_fields}
         years = sorted({y for s in series.values() for y in s})
         for year in years:
-            cols["security"].append(security)
+            cols["entity"].append(entity)
             cols["period"].append(year)
             for f in numeric_fields:
                 cols[f].append(series[f].get(year))
@@ -90,4 +90,4 @@ def to_panel(per_security, fields: set[str]) -> pl.DataFrame:
                 cols[f].append(meta.get(f))
 
     df = pl.DataFrame(cols, schema=schema)
-    return df.sort(["security", "period"]) if df.height else df
+    return df.sort(["entity", "period"]) if df.height else df

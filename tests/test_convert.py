@@ -16,10 +16,10 @@ def test_concepts_from_statements(income_df):
 
 
 def test_to_panel_shape_and_dtypes(statements):
-    per_security = [("AAA", convert.concepts_from_statements(statements), {"meta.sector": "Tech"})]
+    per_entity = [("AAA", convert.concepts_from_statements(statements), {"meta.sector": "Tech"})]
     fields = {"income.revenue", "income.gross_profit", "meta.sector"}
-    panel = convert.to_panel(per_security, fields)
-    assert set(panel.columns) == {"security", "period", "income.revenue", "income.gross_profit", "meta.sector"}
+    panel = convert.to_panel(per_entity, fields)
+    assert set(panel.columns) == {"entity", "period", "income.revenue", "income.gross_profit", "meta.sector"}
     assert panel.schema["period"] == pl.Int32
     assert panel.schema["income.revenue"] == pl.Float64
     assert panel.schema["meta.sector"] == pl.Utf8
@@ -30,10 +30,10 @@ def test_to_panel_empty_is_still_typed():
     panel = convert.to_panel([], {"income.revenue"})
     assert panel.height == 0
     assert panel.schema["income.revenue"] == pl.Float64
-    assert {"security", "period"} <= set(panel.columns)
+    assert {"entity", "period"} <= set(panel.columns)
 
 
 def test_to_panel_ignores_unavailable_fields(statements):
-    per_security = [("AAA", convert.concepts_from_statements(statements), {})]
-    panel = convert.to_panel(per_security, {"income.revenue", "price.adj_close"})
+    per_entity = [("AAA", convert.concepts_from_statements(statements), {})]
+    panel = convert.to_panel(per_entity, {"income.revenue", "price.adj_close"})
     assert "price.adj_close" not in panel.columns

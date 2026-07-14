@@ -71,13 +71,13 @@ class EdgarSource(ExtendedDataSource):
     def load(self, fields: set[str], *, periods: tuple[int, int] | None = None) -> pl.DataFrame:
         requested = {f for f in fields if f in mapping.PROVIDED_FIELDS}
         n_periods, bounds = period_util.year_bounds(self.options, periods)
-        per_security = []
+        per_entity = []
         for ticker in self.securities():
             company, statements = self._fetch_statements(ticker, n_periods)
             concepts = convert.concepts_from_statements(statements)
             meta = self._meta_for(company, requested)
-            per_security.append((ticker, concepts, meta))
-        panel = convert.to_panel(per_security, requested)
+            per_entity.append((ticker, concepts, meta))
+        panel = convert.to_panel(per_entity, requested)
         if bounds is not None and panel.height:
             lo, hi = bounds
             panel = panel.filter((pl.col("period") >= lo) & (pl.col("period") <= hi))

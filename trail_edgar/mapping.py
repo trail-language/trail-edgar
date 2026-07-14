@@ -101,7 +101,7 @@ SHORT_TERM_DEBT_TAGS = [
 
 DERIVED_FIELDS = {"income.gross_profit", "cash.free_cash_flow", "balance.total_debt"}
 
-# per-security constants, resolved outside the concept series (in EdgarSource)
+# per-entity constants, resolved outside the concept series (in EdgarSource)
 META_FIELDS = {"meta.sector", "meta.exchange", "meta.is_active"}
 
 # SEC filings do not carry a market price, so these are declared unavailable.

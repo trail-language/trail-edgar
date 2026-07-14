@@ -35,7 +35,7 @@ def test_values_and_derivations(edgar_source):
         }
     )
     row = panel.filter(
-        (pl.col("security") == "AAA") & (pl.col("period") == 2024)
+        (pl.col("entity") == "AAA") & (pl.col("period") == 2024)
     ).to_dicts()[0]
     assert row["income.revenue"] == 1000.0
     assert row["income.gross_profit"] == 400.0  # revenue - cogs
