@@ -19,8 +19,8 @@ def test_to_panel_shape_and_dtypes(statements):
     per_entity = [("AAA", convert.concepts_from_statements(statements), {"meta.sector": "Tech"})]
     fields = {"income.revenue", "income.gross_profit", "meta.sector"}
     panel = convert.to_panel(per_entity, fields)
-    assert set(panel.columns) == {"entity", "period", "income.revenue", "income.gross_profit", "meta.sector"}
-    assert panel.schema["period"] == pl.Int32
+    assert set(panel.columns) == {"entity", "time", "income.revenue", "income.gross_profit", "meta.sector"}
+    assert isinstance(panel.schema["time"], pl.Datetime)
     assert panel.schema["income.revenue"] == pl.Float64
     assert panel.schema["meta.sector"] == pl.Utf8
     assert panel.height == 2  # FY2024 and FY2023
@@ -30,7 +30,7 @@ def test_to_panel_empty_is_still_typed():
     panel = convert.to_panel([], {"income.revenue"})
     assert panel.height == 0
     assert panel.schema["income.revenue"] == pl.Float64
-    assert {"entity", "period"} <= set(panel.columns)
+    assert {"entity", "time"} <= set(panel.columns)
 
 
 def test_to_panel_ignores_unavailable_fields(statements):

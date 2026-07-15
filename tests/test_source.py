@@ -35,7 +35,7 @@ def test_values_and_derivations(edgar_source):
         }
     )
     row = panel.filter(
-        (pl.col("entity") == "AAA") & (pl.col("period") == 2024)
+        (pl.col("entity") == "AAA") & (pl.col("time").dt.year() == 2024)
     ).to_dicts()[0]
     assert row["income.revenue"] == 1000.0
     assert row["income.gross_profit"] == 400.0  # revenue - cogs
@@ -46,7 +46,7 @@ def test_values_and_derivations(edgar_source):
 
 
 def test_securities_from_tickers(edgar_source):
-    assert edgar_source.securities() == ["AAA", "BBB"]
+    assert edgar_source.entities() == ["AAA", "BBB"]
 
 
 def test_capabilities(edgar_source):
@@ -62,7 +62,7 @@ def test_period_bounds_filter(monkeypatch, statements):
         EdgarSource, "_fetch_statements", lambda self, t, n: (object(), statements)
     )
     panel = src.load({"income.revenue"})
-    assert panel["period"].unique().to_list() == [2024]
+    assert panel["time"].dt.year().unique().to_list() == [2024]
 
 
 def test_identity_is_required(monkeypatch):

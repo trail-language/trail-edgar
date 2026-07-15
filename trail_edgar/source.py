@@ -72,7 +72,7 @@ class EdgarSource(ExtendedDataSource):
         requested = {f for f in fields if f in mapping.PROVIDED_FIELDS}
         n_periods, bounds = period_util.year_bounds(self.options, periods)
         per_entity = []
-        for ticker in self.securities():
+        for ticker in self.entities():
             company, statements = self._fetch_statements(ticker, n_periods)
             concepts = convert.concepts_from_statements(statements)
             meta = self._meta_for(company, requested)
@@ -80,7 +80,8 @@ class EdgarSource(ExtendedDataSource):
         panel = convert.to_panel(per_entity, requested)
         if bounds is not None and panel.height:
             lo, hi = bounds
-            panel = panel.filter((pl.col("period") >= lo) & (pl.col("period") <= hi))
+            yr = pl.col("time").dt.year()
+            panel = panel.filter((yr >= lo) & (yr <= hi))
         return panel
 
     def _fetch_statements(self, ticker: str, n_periods: int):
@@ -114,7 +115,7 @@ class EdgarSource(ExtendedDataSource):
             return FieldInfo(field, False, "unavailable", "SEC filings do not carry market price")
         return None
 
-    def securities(self, universe: str | None = None) -> list[str]:
+    def entities(self, universe: str | None = None) -> list[str]:
         if self._tickers:
             return list(self._tickers)
         name = universe or self._universe
