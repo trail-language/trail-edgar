@@ -4,7 +4,7 @@ from trail_edgar import mapping
 
 
 def test_provided_fields_match_schema_minus_price_and_market_cap():
-    assert mapping.PROVIDED_FIELDS == set(SCHEMA) - {"price.adj_close", "meta.market_cap"}
+    assert mapping.PROVIDED_FIELDS == set(SCHEMA) - mapping.UNAVAILABLE_FIELDS
 
 
 def test_direct_tag_priority():

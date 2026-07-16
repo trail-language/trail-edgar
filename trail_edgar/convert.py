@@ -17,32 +17,43 @@ import polars as pl
 
 from trail_edgar import mapping
 
-_FY_RE = re.compile(r"FY\s*(\d{4})")
+_PERIOD_RE = re.compile(r"(FY|Q[1-4])\s*(\d{4})")
+
+
+def period_key(column_label: object) -> tuple[int, int] | None:
+    """``(year, quarter)`` from an edgartools column label - quarter 0 for a fiscal year
+    (``FY 2024``), 1-4 for a fiscal quarter (``Q3 2024``) - or None for non-period columns.
+    Tuple keys sort chronologically within one frequency; a load is always one frequency."""
+    m = _PERIOD_RE.search(str(column_label))
+    if not m:
+        return None
+    tag, year = m.group(1), int(m.group(2))
+    return (year, 0) if tag == "FY" else (year, int(tag[1]))
 
 
 def fiscal_year(column_label: object) -> int | None:
-    """Parse an int fiscal year from an edgartools column label, or None."""
-    m = _FY_RE.search(str(column_label))
-    return int(m.group(1)) if m else None
+    """Parse an int fiscal year from an annual column label (``FY 2024``), or None."""
+    key = period_key(column_label)
+    return key[0] if key is not None and key[1] == 0 else None
 
 
 def concepts_from_statements(statements) -> mapping.Concepts:
-    """Build ``{concept: {fiscal_year: value}}`` from pandas statement frames.
+    """Build ``{concept: {period_key: value}}`` from pandas statement frames.
 
-    Non-fiscal-year columns (label, confidence, ...) are ignored. When a concept
-    appears in more than one statement, the first value seen for a year is kept.
+    Non-period columns (label, confidence, ...) are ignored. When a concept
+    appears in more than one statement, the first value seen for a period is kept.
     """
     concepts: mapping.Concepts = {}
     for df in statements:
         if df is None or getattr(df, "empty", False):
             continue
-        year_cols = [(c, fiscal_year(c)) for c in df.columns]
-        year_cols = [(c, y) for c, y in year_cols if y is not None]
-        if not year_cols:
+        period_cols = [(c, period_key(c)) for c in df.columns]
+        period_cols = [(c, k) for c, k in period_cols if k is not None]
+        if not period_cols:
             continue
         for concept, row in df.iterrows():
             series = concepts.setdefault(str(concept), {})
-            for col, year in year_cols:
+            for col, key in period_cols:
                 value = row[col]
                 if value is None:
                     continue
@@ -52,8 +63,20 @@ def concepts_from_statements(statements) -> mapping.Concepts:
                     continue
                 if math.isnan(fval):
                     continue
-                series.setdefault(year, fval)
+                series.setdefault(key, fval)
     return concepts
+
+
+# period key -> calendar period-end month/day. Quarter 0 is a full fiscal year. Fiscal
+# quarters are mapped to calendar quarter-ends of the label year - the same simplification
+# the annual path applies (FY -> Dec 31); canonical fiscal alignment is a later phase.
+_Q_END = {0: (12, 31), 1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+
+
+def _period_end(key: tuple[int, int]) -> dt.datetime:
+    year, q = key
+    month, day = _Q_END[q]
+    return dt.datetime(year, month, day)
 
 
 def _panel_schema(numeric_fields: list[str], meta_fields: list[str]) -> dict:
@@ -81,12 +104,12 @@ def to_panel(per_entity, fields: set[str]) -> pl.DataFrame:
 
     for entity, concepts, meta in per_entity:
         series = {f: mapping.resolve_field(f, concepts) for f in numeric_fields}
-        years = sorted({y for s in series.values() for y in s})
-        for year in years:
+        keys = sorted({k for s in series.values() for k in s})
+        for key in keys:
             cols["entity"].append(entity)
-            cols["time"].append(dt.datetime(year, 12, 31))
+            cols["time"].append(_period_end(key))
             for f in numeric_fields:
-                cols[f].append(series[f].get(year))
+                cols[f].append(series[f].get(key))
             for f in meta_fields:
                 cols[f].append(meta.get(f))
 

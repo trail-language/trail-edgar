@@ -1214,7 +1214,7 @@ wheels = [
 
 [[package]]
 name = "trail-edgar"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "edgartools" },
@@ -1233,7 +1233,7 @@ dev = [
 requires-dist = [
     { name = "edgartools", specifier = ">=5.42,<6" },
     { name = "polars", specifier = ">=1.20" },
-    { name = "trail-lang", specifier = ">=0.7" },
+    { name = "trail-lang", specifier = ">=0.9" },
 ]
 
 [package.metadata.requires-dev]
@@ -1245,7 +1245,7 @@ dev = [
 
 [[package]]
 name = "trail-lang"
-version = "0.7.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1253,9 +1253,9 @@ dependencies = [
     { name = "polars" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/3a/3ec085dee965c723970801e175dceab13aafac870868d6e46d3f851bf31d/trail_lang-0.7.0.tar.gz", hash = "sha256:979c23cf1faecbbb3e62aa8fb064b5e0159c834a4866dba02b4cce652ee6c77c", size = 90330, upload-time = "2026-07-16T19:30:29.389Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/10/48/b40458c46f50bd3a3fe86b3e864e2f97247e793dd9345e2686ae7ef7f64e/trail_lang-0.9.0.tar.gz", hash = "sha256:58b16a50751b4c1b3f43880830a7adb5433f8570bbf64fc72258e189ce3d2160", size = 95142, upload-time = "2026-07-16T22:09:14.858Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/18/00/0f89911534ef8d9701596b86790ce4ae47500e5b0b605b24ec4f17e6bd35/trail_lang-0.7.0-py3-none-any.whl", hash = "sha256:ea844f224d6c6534e20a5d4e2d435d21394668dec5118c915e60be442dff8ab4", size = 46888, upload-time = "2026-07-16T19:30:28.246Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/e7/d636d38cb7592d5990f2a45b79652d358526f45f236fa66c7ddbfb751d7d/trail_lang-0.9.0-py3-none-any.whl", hash = "sha256:42a155c323b17df46db91cc240b81558dcb610e58733ba3ac941fdda0520a537", size = 49516, upload-time = "2026-07-16T22:09:13.561Z" },
 ]
 
 [[package]]

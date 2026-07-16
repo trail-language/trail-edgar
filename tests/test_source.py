@@ -72,7 +72,8 @@ def test_meta_country_available_and_described(edgar_source):
 
 def test_capabilities(edgar_source):
     caps = edgar_source.capabilities()
-    assert caps.frequency == "annual" and caps.forms == ("10-K",)
+    assert caps.frequency == "annual" and caps.forms == ("10-K", "10-Q")
+    assert caps.frequencies == ("annual", "quarterly")
 
 
 def test_period_bounds_filter(monkeypatch, statements):
@@ -80,10 +81,44 @@ def test_period_bounds_filter(monkeypatch, statements):
         {"identity": "Trail Test test@example.com", "tickers": ["AAA"], "years": [2024, 2024]}
     )
     monkeypatch.setattr(
-        EdgarSource, "_fetch_statements", lambda self, t, n: (object(), statements)
+        EdgarSource, "_fetch_statements", lambda self, t, n, period="annual": (object(), statements)
     )
     panel = src.load({"income.revenue"})
     assert panel["time"].dt.year().unique().to_list() == [2024]
+
+
+def test_new_field_mappings(edgar_source):
+    panel = edgar_source.load({
+        "income.ebitda", "income.depreciation_amortization", "income.sga",
+        "balance.net_fixed_assets", "balance.goodwill", "balance.minority_interest",
+        "cash.cfi", "cash.net_change_in_cash", "cash.dividends_paid",
+    })
+    row = panel.filter(
+        (pl.col("entity") == "AAA") & (pl.col("time").dt.year() == 2024)
+    ).to_dicts()[0]
+    assert row["income.depreciation_amortization"] == 40.0
+    assert row["income.ebitda"] == 240.0            # derived: operating income 200 + d&a 40
+    assert row["income.sga"] == 100.0
+    assert row["balance.net_fixed_assets"] == 900.0
+    assert row["balance.goodwill"] == 400.0
+    assert row["cash.cfi"] == -120.0                # signed flow
+    assert row["cash.net_change_in_cash"] == 100.0
+    assert row["cash.dividends_paid"] == 60.0       # abs of -60
+
+
+def test_quarterly_load(monkeypatch, quarterly_statements):
+    import conftest
+
+    src = EdgarSource({"identity": "Trail Test test@example.com", "tickers": ["AAA"]})
+    monkeypatch.setattr(
+        EdgarSource, "_fetch_statements",
+        lambda self, t, n, period="annual": (conftest.FakeCompany(), quarterly_statements),
+    )
+    panel = src.load({"income.revenue", "income.net_income"}, frequency="quarterly").sort("time")
+    assert panel.height == 2
+    # Q2 2024 -> 2024-06-30, Q3 2024 -> 2024-09-30 (calendar quarter-ends of the label year)
+    assert [t.month for t in panel["time"].to_list()] == [6, 9]
+    assert panel["income.revenue"].to_list() == [250.0, 260.0]
 
 
 def test_identity_is_required(monkeypatch):
