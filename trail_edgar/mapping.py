@@ -80,16 +80,51 @@ DIRECT_TAGS: dict[str, list[str]] = {
         "PaymentsToAcquirePropertyPlantAndEquipment", "CapitalExpenditures",
         "PurchaseOfPropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets",
     ],
+    "income.depreciation_amortization": [
+        "DepreciationDepletionAndAmortization", "DepreciationAndAmortization",
+        "DepreciationAmortizationAndAccretionNet", "Depreciation",
+    ],
+    "income.sga": [
+        "SellingGeneralAndAdministrativeExpense", "GeneralAndAdministrativeExpense",
+    ],
+    "balance.net_fixed_assets": ["PropertyPlantAndEquipmentNet"],
+    "balance.cash_and_equivalents": [
+        "CashAndCashEquivalentsAtCarryingValue",
+        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+    ],
+    "balance.cash_and_short_term_investments": ["CashCashEquivalentsAndShortTermInvestments"],
+    "balance.minority_interest": ["MinorityInterest"],
+    "balance.common_stock": ["CommonStockValue", "CommonStocksIncludingAdditionalPaidInCapital"],
+    "balance.goodwill": ["Goodwill"],
+    "cash.cfi": [
+        "NetCashProvidedByUsedInInvestingActivities",
+        "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations",
+    ],
+    "cash.cff": [
+        "NetCashProvidedByUsedInFinancingActivities",
+        "NetCashProvidedByUsedInFinancingActivitiesContinuingOperations",
+    ],
+    "cash.net_change_in_cash": [
+        "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect",
+        "CashAndCashEquivalentsPeriodIncreaseDecrease",
+    ],
+    "cash.dividends_paid": [
+        "PaymentsOfDividends", "PaymentsOfDividendsCommonStock",
+    ],
 }
 
 # fields reported as a positive cash-outflow magnitude, normalized with abs()
-ABS_FIELDS = {"cash.capex"}
+ABS_FIELDS = {"cash.capex", "cash.dividends_paid"}
 
 # single-purpose tags with no standardized synonym group
 RAW_TAGS: dict[str, list[str]] = {
     "income.weighted_average_shares_diluted": [
         "WeightedAverageNumberOfDilutedSharesOutstanding",
         "WeightedAverageNumberOfSharesOutstandingDiluted",
+    ],
+    "income.weighted_average_shares": [
+        "WeightedAverageNumberOfSharesOutstandingBasic",
+        "WeightedAverageNumberOfSharesOutstanding",
     ],
     "cash.stock_issued": ["ProceedsFromIssuanceOfCommonStock"],
 }
@@ -99,19 +134,21 @@ SHORT_TERM_DEBT_TAGS = [
     "DebtCurrent", "ShortTermBorrowings", "LongTermDebtCurrent", "NotesPayableCurrent",
 ]
 
-DERIVED_FIELDS = {"income.gross_profit", "cash.free_cash_flow", "balance.total_debt"}
+DERIVED_FIELDS = {"income.gross_profit", "cash.free_cash_flow", "balance.total_debt",
+                  "income.ebitda"}
 
 # per-entity constants, resolved outside the concept series (in EdgarSource)
 META_FIELDS = {"meta.sector", "meta.exchange", "meta.is_active", "meta.country"}
 
-# SEC filings do not carry a market price, so these are declared unavailable.
-UNAVAILABLE_FIELDS = {"price.adj_close", "meta.market_cap"}
+# SEC filings do not carry market data, so these are declared unavailable.
+UNAVAILABLE_FIELDS = {"price.adj_close", "price.dividends", "meta.market_cap"}
 
 # every canonical field this source can supply
 PROVIDED_FIELDS = set(DIRECT_TAGS) | set(RAW_TAGS) | DERIVED_FIELDS | META_FIELDS
 
-Series = dict[int, float]
-Concepts = dict[str, dict[int, float]]
+Period = tuple[int, int]  # (year, quarter); quarter 0 = full fiscal year
+Series = dict[Period, float]
+Concepts = dict[str, dict[Period, float]]
 
 
 def strategy_of(field: str) -> str:
@@ -168,6 +205,10 @@ def resolve_field(field: str, concepts: Concepts) -> Series:
         cfo = resolve_field("cash.cfo", concepts)
         capex = resolve_field("cash.capex", concepts)  # already abs
         return {y: cfo[y] - capex[y] for y in cfo.keys() & capex.keys()}
+    if field == "income.ebitda":  # not a us-gaap tag: derive from operating income + d&a
+        oi = resolve_field("income.operating_income", concepts)
+        da = resolve_field("income.depreciation_amortization", concepts)
+        return {y: oi[y] + da[y] for y in oi.keys() & da.keys()}
     if field == "balance.total_debt":
         ltd = resolve_field("balance.long_term_debt", concepts)
         std = _sum_series([_series_for_tags(concepts, [t]) for t in SHORT_TERM_DEBT_TAGS])

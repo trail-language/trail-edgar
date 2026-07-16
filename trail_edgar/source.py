@@ -91,15 +91,18 @@ class EdgarSource(ExtendedDataSource):
 
     # --- core tier ---
     def load(self, fields: set[str], *, periods: tuple[int, int] | None = None,
-             entities: list[str] | None = None) -> pl.DataFrame:
+             entities: list[str] | None = None, frequency: str | None = None) -> pl.DataFrame:
         requested = {f for f in fields if f in mapping.PROVIDED_FIELDS}
         n_periods, bounds = period_util.year_bounds(self.options, periods)
+        period = "quarterly" if frequency == "quarterly" else "annual"
+        if period == "quarterly":
+            n_periods *= 4  # the year bound counts years; 10-Q statements come per quarter
         # a caller-supplied universe (Trail's entities= seam) scopes the fetch, overriding
         # options.tickers / options.universe; otherwise fall back to the configured set.
         tickers = [str(t).upper() for t in entities] if entities else self.entities()
         per_entity = []
         for ticker in tickers:
-            company, statements = self._fetch_statements(ticker, n_periods)
+            company, statements = self._fetch_statements(ticker, n_periods, period)
             concepts = convert.concepts_from_statements(statements)
             meta = self._meta_for(company, requested)
             per_entity.append((ticker, concepts, meta))
@@ -110,14 +113,14 @@ class EdgarSource(ExtendedDataSource):
             panel = panel.filter((yr >= lo) & (yr <= hi))
         return panel
 
-    def _fetch_statements(self, ticker: str, n_periods: int):
-        """Fetch the three annual statements for a ticker (the network seam)."""
+    def _fetch_statements(self, ticker: str, n_periods: int, period: str = "annual"):
+        """Fetch the three statements for a ticker at `period` (the network seam)."""
         from edgar import Company
 
         company = Company(ticker)
-        income = company.income_statement(periods=n_periods, period="annual", as_dataframe=True)
-        balance = company.balance_sheet(periods=n_periods, period="annual", as_dataframe=True)
-        cashflow = company.cashflow_statement(periods=n_periods, period="annual", as_dataframe=True)
+        income = company.income_statement(periods=n_periods, period=period, as_dataframe=True)
+        balance = company.balance_sheet(periods=n_periods, period=period, as_dataframe=True)
+        cashflow = company.cashflow_statement(periods=n_periods, period=period, as_dataframe=True)
         return company, [income, balance, cashflow]
 
     def _meta_for(self, company, fields: set[str]) -> dict:
@@ -152,7 +155,8 @@ class EdgarSource(ExtendedDataSource):
     def capabilities(self) -> Capabilities:
         return Capabilities(
             frequency="annual",
-            forms=("10-K",),
+            frequencies=("annual", "quarterly"),
+            forms=("10-K", "10-Q"),
             provides_meta=True,
             provenance="SEC EDGAR via edgartools",
         )

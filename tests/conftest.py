@@ -27,6 +27,8 @@ def income_df() -> pd.DataFrame:
         {
             "Revenues": ("Total Revenue", 1000.0, 900.0),
             "CostOfRevenue": ("Cost of Revenue", 600.0, 540.0),
+            "DepreciationDepletionAndAmortization": ("D&A", 40.0, 36.0),
+            "SellingGeneralAndAdministrativeExpense": ("SG&A", 100.0, 90.0),
             "OperatingIncomeLoss": ("Operating Income", 200.0, 180.0),
             "NetIncomeLoss": ("Net Income", 120.0, 108.0),
             "InterestExpense": ("Interest Expense", 20.0, 18.0),
@@ -53,6 +55,11 @@ def balance_df() -> pd.DataFrame:
             "AccountsReceivableNetCurrent": ("Accounts Receivable", 150.0, 135.0),
             "InventoryNet": ("Inventory", 100.0, 90.0),
             "AccountsPayableCurrent": ("Accounts Payable", 120.0, 108.0),
+            "PropertyPlantAndEquipmentNet": ("Net PP&E", 900.0, 850.0),
+            "CashAndCashEquivalentsAtCarryingValue": ("Cash", 250.0, 220.0),
+            "Goodwill": ("Goodwill", 400.0, 400.0),
+            "MinorityInterest": ("Minority Interest", 40.0, 38.0),
+            "CommonStockValue": ("Common Stock", 100.0, 100.0),
         }
     )
 
@@ -64,6 +71,10 @@ def cashflow_df() -> pd.DataFrame:
             "NetCashProvidedByUsedInOperatingActivities": ("CFO", 300.0, 270.0),
             "PaymentsToAcquirePropertyPlantAndEquipment": ("CapEx", 50.0, 45.0),
             "ProceedsFromIssuanceOfCommonStock": ("Stock Issued", 10.0, 9.0),
+            "NetCashProvidedByUsedInInvestingActivities": ("CFI", -120.0, -100.0),
+            "NetCashProvidedByUsedInFinancingActivities": ("CFF", -80.0, -70.0),
+            "CashAndCashEquivalentsPeriodIncreaseDecrease": ("Net Change", 100.0, 100.0),
+            "PaymentsOfDividends": ("Dividends Paid", -60.0, -55.0),
         }
     )
 
@@ -91,6 +102,28 @@ def edgar_source(monkeypatch, statements):
     monkeypatch.setattr(
         EdgarSource,
         "_fetch_statements",
-        lambda self, ticker, n: (FakeCompany(), statements),
+        lambda self, ticker, n, period="annual": (FakeCompany(), statements),
     )
     return src
+
+
+def _qstmt(rows: dict) -> pd.DataFrame:
+    """Quarterly-shaped frame: edgartools labels fiscal quarters like ``Q3 2024``."""
+    index = list(rows)
+    data = {
+        "label": [rows[c][0] for c in index],
+        "Q3 2024": [rows[c][1] for c in index],
+        "Q2 2024": [rows[c][2] for c in index],
+    }
+    return pd.DataFrame(data, index=index)
+
+
+@pytest.fixture
+def quarterly_statements():
+    income = _qstmt({
+        "Revenues": ("Total Revenue", 260.0, 250.0),
+        "NetIncomeLoss": ("Net Income", 31.0, 30.0),
+    })
+    balance = _qstmt({"Assets": ("Total Assets", 1950.0, 1900.0)})
+    cash = _qstmt({"NetCashProvidedByUsedInOperatingActivities": ("CFO", 80.0, 75.0)})
+    return [income, balance, cash]

@@ -11,7 +11,7 @@ def test_fiscal_year_parsing():
 
 def test_concepts_from_statements(income_df):
     concepts = convert.concepts_from_statements([income_df])
-    assert concepts["Revenues"] == {2024: 1000.0, 2023: 900.0}
+    assert concepts["Revenues"] == {(2024, 0): 1000.0, (2023, 0): 900.0}  # (year, quarter=0=FY)
     assert "label" not in concepts  # the label column is not a concept
 
 
