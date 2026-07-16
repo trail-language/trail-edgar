@@ -73,8 +73,13 @@ def statements(income_df, balance_df, cashflow_df):
     return [income_df, balance_df, cashflow_df]
 
 
+class _FakeAddress:
+    state_or_country = "CA"  # a US state code -> should normalize to USA, not California-as-country
+
+
 class FakeCompany:
     sic_description = "Technology"
+    business_address = _FakeAddress()
 
     def get_exchanges(self):
         return ["NASDAQ"]

@@ -49,6 +49,27 @@ def test_securities_from_tickers(edgar_source):
     assert edgar_source.entities() == ["AAA", "BBB"]
 
 
+def test_entities_kwarg_overrides_configured_tickers(edgar_source):
+    panel = edgar_source.load({"income.revenue"}, entities=["ccc"])
+    assert panel["entity"].unique().to_list() == ["CCC"]  # caller universe wins, normalized upper
+
+
+def test_load_without_entities_uses_configured_tickers(edgar_source):
+    panel = edgar_source.load({"income.revenue"})
+    assert set(panel["entity"].unique().to_list()) == {"AAA", "BBB"}
+
+
+def test_meta_country_normalizes_us_state_to_iso3(edgar_source):
+    panel = edgar_source.load({"income.revenue", "meta.country"})
+    assert panel["meta.country"].unique().to_list() == ["USA"]  # address "CA" -> USA
+
+
+def test_meta_country_available_and_described(edgar_source):
+    assert "meta.country" in edgar_source.available_fields()
+    info = edgar_source.describe_field("meta.country")
+    assert info is not None and info.available is True
+
+
 def test_capabilities(edgar_source):
     caps = edgar_source.capabilities()
     assert caps.frequency == "annual" and caps.forms == ("10-K",)
