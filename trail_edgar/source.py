@@ -13,6 +13,7 @@ import os
 import polars as pl
 
 from trail.config import ConfigError
+from trail.country import to_iso3
 from trail.source import Capabilities, ExtendedDataSource, FieldInfo
 
 from trail_edgar import convert, mapping
@@ -45,6 +46,27 @@ def _sector_of(company) -> str | None:
     return None
 
 
+# SEC 'state_or_country' uses US 2-letter state codes for domestic filers; these must resolve
+# to USA, not be read as ISO alpha-2 country codes ("AL" is Alabama, not Albania).
+_US_STATES = frozenset({
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
+    "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT",
+    "VA", "WA", "WV", "WI", "WY", "DC", "PR", "VI", "GU", "AS", "MP",
+})
+
+
+def _country_of(company) -> str | None:
+    """Best-effort ISO3 country from the filer's SEC address. US state codes resolve to USA;
+    foreign codes are mapped where they align with ISO alpha-2, else None (a null bridge)."""
+    addr = getattr(company, "business_address", None) or getattr(company, "mailing_address", None)
+    code = getattr(addr, "state_or_country", None) if addr is not None else None
+    if not code:
+        return None
+    code = str(code).strip().upper()
+    return "USA" if code in _US_STATES else to_iso3(code)
+
+
 class EdgarSource(ExtendedDataSource):
     """SEC EDGAR annual financial statements as a Trail panel."""
 
@@ -68,11 +90,15 @@ class EdgarSource(ExtendedDataSource):
         self._universe = self.options.get("universe")
 
     # --- core tier ---
-    def load(self, fields: set[str], *, periods: tuple[int, int] | None = None) -> pl.DataFrame:
+    def load(self, fields: set[str], *, periods: tuple[int, int] | None = None,
+             entities: list[str] | None = None) -> pl.DataFrame:
         requested = {f for f in fields if f in mapping.PROVIDED_FIELDS}
         n_periods, bounds = period_util.year_bounds(self.options, periods)
+        # a caller-supplied universe (Trail's entities= seam) scopes the fetch, overriding
+        # options.tickers / options.universe; otherwise fall back to the configured set.
+        tickers = [str(t).upper() for t in entities] if entities else self.entities()
         per_entity = []
-        for ticker in self.entities():
+        for ticker in tickers:
             company, statements = self._fetch_statements(ticker, n_periods)
             concepts = convert.concepts_from_statements(statements)
             meta = self._meta_for(company, requested)
@@ -102,6 +128,8 @@ class EdgarSource(ExtendedDataSource):
             meta["meta.exchange"] = _first_exchange(company)
         if "meta.sector" in fields:
             meta["meta.sector"] = _sector_of(company)
+        if "meta.country" in fields:
+            meta["meta.country"] = _country_of(company)
         return meta
 
     # --- extended tier ---
