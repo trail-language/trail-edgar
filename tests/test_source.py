@@ -1,11 +1,13 @@
+import datetime as dt
+
 import polars as pl
 import pytest
 
 from trail.config import ConfigError
-from trail.source import LoadRequest
+from trail.source import LoadRequest, date_col
 from trail.testing import assert_source_conforms
 
-from trail_edgar.source import EdgarSource
+from trail_edgar.source import EdgarSource, _filing_dates
 
 
 def test_conforms_to_contract(edgar_source):
@@ -128,3 +130,50 @@ def test_identity_is_required(monkeypatch):
     monkeypatch.delenv("EDGAR_IDENTITY", raising=False)
     with pytest.raises(ConfigError, match="E-EDGAR-IDENTITY"):
         EdgarSource({"tickers": ["AAA"]})
+
+
+def test_capabilities_declares_pit(edgar_source):
+    assert edgar_source.capabilities().pit is True
+
+
+def test_statement_fields_align_on_filing_date_meta_is_naive(edgar_source):
+    for field in ("income.revenue", "balance.total_assets", "cash.cfo", "income.gross_profit"):
+        info = edgar_source.describe_field(field)
+        assert info is not None and info.aligns_on == "filing_date"
+    for field in ("meta.sector", "meta.exchange", "meta.country", "meta.is_active"):
+        info = edgar_source.describe_field(field)
+        assert info is not None and info.aligns_on is None
+
+
+def test_panel_carries_filing_date_coordinate(edgar_source):
+    import conftest
+
+    panel = edgar_source.load(LoadRequest(fields=frozenset({"income.revenue", "meta.sector"})))
+    coord = date_col("filing_date")
+    assert coord in panel.columns
+    assert isinstance(panel.schema[coord], pl.Datetime)
+    row = panel.filter(
+        (pl.col("entity") == "AAA") & (pl.col("time").dt.year() == 2024)
+    ).to_dicts()[0]
+    assert row[coord] == dt.datetime.combine(conftest.FILING_DATE_FY2024, dt.time())
+
+
+def test_filing_dates_takes_earliest_and_filters_form_and_statement_type():
+    import conftest
+
+    # two facts for the same annual period: an original 10-K disclosure and a later 10-K's
+    # comparative re-disclosure with a later filing_date - the earliest (original) must win.
+    original = conftest._FakeFact(2024, "FY", "IncomeStatement", dt.date(2025, 2, 1))
+    comparative = conftest._FakeFact(2024, "FY", "IncomeStatement", dt.date(2026, 2, 1))
+    non_periodic_form = conftest._FakeFact(2024, "FY", "IncomeStatement", dt.date(2025, 1, 1), form_type="8-K")
+    non_statement = conftest._FakeFact(2024, "FY", "CoverPage", dt.date(2025, 1, 1))
+
+    class _Company:
+        facts = [original, comparative, non_periodic_form, non_statement]
+
+    dates = _filing_dates(_Company())
+    assert dates == {(2024, 0): dt.datetime(2025, 2, 1)}
+
+
+def test_filing_dates_handles_missing_facts():
+    assert _filing_dates(object()) == {}
