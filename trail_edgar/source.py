@@ -1,10 +1,9 @@
 """EdgarSource: a Trail data source backed by SEC EDGAR via edgartools.
 
-Implements the full extended-tier contract (:class:`trail.source.ExtendedDataSource`):
-loads normalized annual (10-K) income, balance-sheet, and cash-flow figures for a
-configured set of tickers, reports which canonical fields it can supply, enumerates its
-universe, and describes its capabilities. Market price and market cap are declared
-unavailable, since SEC filings do not carry a price.
+Implements the :class:`trail.source.DataSource` contract: loads normalized annual (10-K)
+income, balance-sheet, and cash-flow figures for a configured set of tickers, reports which
+canonical fields it can supply, enumerates its universe, and describes its capabilities.
+Market price and market cap are declared unavailable, since SEC filings do not carry a price.
 """
 from __future__ import annotations
 
@@ -14,7 +13,7 @@ import polars as pl
 
 from trail.config import ConfigError
 from trail.country import to_iso3
-from trail.source import Capabilities, ExtendedDataSource, FieldInfo
+from trail.source import Capabilities, DataSource, FieldInfo, LoadRequest
 
 from trail_edgar import convert, mapping
 from trail_edgar import periods as period_util
@@ -67,7 +66,7 @@ def _country_of(company) -> str | None:
     return "USA" if code in _US_STATES else to_iso3(code)
 
 
-class EdgarSource(ExtendedDataSource):
+class EdgarSource(DataSource):
     """SEC EDGAR annual financial statements as a Trail panel."""
 
     name = "edgar"
@@ -92,8 +91,8 @@ class EdgarSource(ExtendedDataSource):
         self._universe = self.options.get("universe")
 
     # --- core tier ---
-    def load(self, fields: set[str], *, periods: tuple[int, int] | None = None,
-             entities: list[str] | None = None, frequency: str | None = None) -> pl.DataFrame:
+    def load(self, request: LoadRequest) -> pl.DataFrame:
+        fields, periods, frequency = request.fields, request.periods, request.frequency
         requested = {f for f in fields if f in mapping.PROVIDED_FIELDS}
         n_periods, bounds = period_util.year_bounds(self.options, periods)
         period = "quarterly" if frequency == "quarterly" else "annual"
@@ -101,7 +100,7 @@ class EdgarSource(ExtendedDataSource):
             n_periods *= 4  # the year bound counts years; 10-Q statements come per quarter
         # a caller-supplied universe (Trail's entities= seam) scopes the fetch, overriding
         # options.tickers / options.universe; otherwise fall back to the configured set.
-        tickers = [str(t).upper() for t in entities] if entities else self.entities()
+        tickers = [str(t).upper() for t in request.entities] if request.entities else self.entities()
         per_entity = []
         for ticker in tickers:
             company, statements = self._fetch_statements(ticker, n_periods, period)
@@ -137,8 +136,7 @@ class EdgarSource(ExtendedDataSource):
             meta["meta.country"] = _country_of(company)
         return meta
 
-    # --- extended tier ---
-    def available_fields(self) -> set[str]:
+    def available_fields(self, frequency: str | None = None) -> set[str]:
         return set(mapping.PROVIDED_FIELDS)
 
     def describe_field(self, field: str) -> FieldInfo | None:

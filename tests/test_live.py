@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from trail.source import LoadRequest
 from trail_edgar import EdgarSource
 
 
@@ -13,7 +14,7 @@ from trail_edgar import EdgarSource
 def test_live_apple_annual_revenue():
     identity = os.environ.get("EDGAR_IDENTITY", "Trail Test test@example.com")
     src = EdgarSource({"identity": identity, "tickers": ["AAPL"], "periods": 3})
-    panel = src.load({"income.revenue", "balance.total_assets", "meta.exchange"})
+    panel = src.load(LoadRequest(fields=frozenset({"income.revenue", "balance.total_assets", "meta.exchange"})))
     assert panel.height > 0
     latest = panel.sort("time").tail(1).to_dicts()[0]
     assert latest["income.revenue"] and latest["income.revenue"] > 0
