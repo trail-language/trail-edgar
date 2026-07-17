@@ -82,7 +82,9 @@ class EdgarSource(ExtendedDataSource):
             )
         cache_dir = self.options.get("cache_dir")
         if cache_dir:
-            os.environ["EDGAR_LOCAL_DATA_DIR"] = str(cache_dir)
+            # set-if-unset: edgartools reads this at its own import/config time, and two
+            # sources in one process must not clobber each other's cache location
+            os.environ.setdefault("EDGAR_LOCAL_DATA_DIR", str(cache_dir))
         from edgar import set_identity
 
         set_identity(identity)
