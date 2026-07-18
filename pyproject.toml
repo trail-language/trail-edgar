@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "trail-lang>=0.9",
+    "trail-lang>=0.12",
     "edgartools>=5.42,<6",
     "polars>=1.20",
 ]
@@ -50,3 +50,9 @@ line-length = 100
 testpaths = ["tests"]
 markers = ["live: hits the live SEC EDGAR API (needs network and an identity)"]
 addopts = "-m 'not live'"
+
+[tool.uv.sources]
+# Track trail-lang `main` during co-development: this adapter needs the DataSource-v2 `LoadRequest`
+# API and the balance.other_current_assets schema field, both on main but not yet in a release.
+# Pin back to a published version once trail-lang releases these.
+trail-lang = { git = "https://github.com/trail-language/trail-lang.git", branch = "main" }
