@@ -15,9 +15,15 @@ import re
 
 import polars as pl
 
+from trail.source import date_col
+
 from trail_edgar import mapping
 
 _PERIOD_RE = re.compile(r"(FY|Q[1-4])\s*(\d{4})")
+
+#: physical column for the per-period 10-K/10-Q filing-date alignment coordinate (see
+#: trail_edgar.source._filing_dates and EdgarSource.describe_field's aligns_on).
+FILING_DATE_COL = date_col("filing_date")
 
 
 def period_key(column_label: object) -> tuple[int, int] | None:
@@ -79,30 +85,38 @@ def _period_end(key: tuple[int, int]) -> dt.datetime:
     return dt.datetime(year, month, day)
 
 
-def _panel_schema(numeric_fields: list[str], meta_fields: list[str]) -> dict:
+def _panel_schema(numeric_fields: list[str], meta_fields: list[str], include_filing_date: bool) -> dict:
     schema: dict = {"entity": pl.Utf8, "time": pl.Datetime("us")}
     for f in numeric_fields:
         schema[f] = pl.Float64
     for f in meta_fields:
         schema[f] = pl.Boolean if f == "meta.is_active" else pl.Utf8
+    if include_filing_date:
+        schema[FILING_DATE_COL] = pl.Datetime("us")
     return schema
 
 
 def to_panel(per_entity, fields: set[str]) -> pl.DataFrame:
     """Assemble the panel from resolved per-entity data.
 
-    ``per_entity`` is an iterable of ``(entity, concepts, meta)`` where ``concepts``
-    is a :data:`mapping.Concepts` mapping and ``meta`` maps meta fields to per-entity
-    constants. Returns a ``(entity, time)`` panel restricted to ``fields`` (plus the
-    two index columns), with an explicit schema so an empty result is still well typed.
+    ``per_entity`` is an iterable of ``(entity, concepts, meta, filing_dates)`` where
+    ``concepts`` is a :data:`mapping.Concepts` mapping, ``meta`` maps meta fields to
+    per-entity constants, and ``filing_dates`` maps a period key to its 10-K/10-Q filing
+    date (see :func:`trail_edgar.source._filing_dates`). Returns a ``(entity, time)`` panel
+    restricted to ``fields`` (plus the two index columns), with an explicit schema so an
+    empty result is still well typed. When any statement-derived field is requested, the
+    panel also carries :data:`FILING_DATE_COL`, the alignment coordinate those fields align
+    on (null where a period's filing date is unavailable - the align engine coalesces that
+    to period-end).
     """
     numeric_fields = sorted(f for f in fields if f in mapping.PROVIDED_FIELDS
                             and f not in mapping.META_FIELDS)
     meta_fields = sorted(f for f in fields if f in mapping.META_FIELDS)
-    schema = _panel_schema(numeric_fields, meta_fields)
+    include_filing_date = bool(numeric_fields)
+    schema = _panel_schema(numeric_fields, meta_fields, include_filing_date)
     cols: dict[str, list] = {name: [] for name in schema}
 
-    for entity, concepts, meta in per_entity:
+    for entity, concepts, meta, filing_dates in per_entity:
         series = {f: mapping.resolve_field(f, concepts) for f in numeric_fields}
         keys = sorted({k for s in series.values() for k in s})
         for key in keys:
@@ -112,6 +126,8 @@ def to_panel(per_entity, fields: set[str]) -> pl.DataFrame:
                 cols[f].append(series[f].get(key))
             for f in meta_fields:
                 cols[f].append(meta.get(f))
+            if include_filing_date:
+                cols[FILING_DATE_COL].append(filing_dates.get(key))
 
     df = pl.DataFrame(cols, schema=schema)
     return df.sort(["entity", "time"]) if df.height else df

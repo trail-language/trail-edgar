@@ -5,10 +5,31 @@ The synthetic frames mirror the shape edgartools returns from
 concept on the index, a ``label`` column, and fiscal-year columns labelled ``FY 20xx``.
 Monkeypatching ``EdgarSource._fetch_statements`` keeps the whole suite offline.
 """
+import datetime as dt
+
 import pandas as pd
 import pytest
 
 from trail_edgar.source import EdgarSource
+
+# filing dates for the synthetic FY2024/FY2023 and Q3/Q2 2024 periods below - distinct from
+# any period-end so PIT tests can tell "filing date" apart from "naive period-end" placement.
+FILING_DATE_FY2024 = dt.date(2025, 2, 3)
+FILING_DATE_FY2023 = dt.date(2024, 2, 5)
+FILING_DATE_Q3_2024 = dt.date(2024, 10, 30)
+FILING_DATE_Q2_2024 = dt.date(2024, 7, 31)
+
+
+class _FakeFact:
+    """Minimal stand-in for ``edgar.entity.models.FinancialFact`` - only the attributes
+    ``trail_edgar.source._filing_dates`` reads."""
+
+    def __init__(self, fiscal_year, fiscal_period, statement_type, filing_date, form_type="10-K"):
+        self.fiscal_year = fiscal_year
+        self.fiscal_period = fiscal_period
+        self.statement_type = statement_type
+        self.filing_date = filing_date
+        self.form_type = form_type
 
 
 def _stmt(rows: dict) -> pd.DataFrame:
@@ -91,6 +112,23 @@ class _FakeAddress:
 class FakeCompany:
     sic_description = "Technology"
     business_address = _FakeAddress()
+    # stand-in for the cached_property `edgar.Company.facts` - annual and quarterly statement
+    # facts for the periods the fixtures below cover, so `_filing_dates` has something to read
+    # without a network call.
+    facts = [
+        _FakeFact(2024, "FY", "IncomeStatement", FILING_DATE_FY2024),
+        _FakeFact(2024, "FY", "BalanceSheet", FILING_DATE_FY2024),
+        _FakeFact(2024, "FY", "CashFlowStatement", FILING_DATE_FY2024),
+        _FakeFact(2023, "FY", "IncomeStatement", FILING_DATE_FY2023),
+        _FakeFact(2023, "FY", "BalanceSheet", FILING_DATE_FY2023),
+        _FakeFact(2023, "FY", "CashFlowStatement", FILING_DATE_FY2023),
+        _FakeFact(2024, "Q3", "IncomeStatement", FILING_DATE_Q3_2024, form_type="10-Q"),
+        _FakeFact(2024, "Q3", "BalanceSheet", FILING_DATE_Q3_2024, form_type="10-Q"),
+        _FakeFact(2024, "Q3", "CashFlowStatement", FILING_DATE_Q3_2024, form_type="10-Q"),
+        _FakeFact(2024, "Q2", "IncomeStatement", FILING_DATE_Q2_2024, form_type="10-Q"),
+        _FakeFact(2024, "Q2", "BalanceSheet", FILING_DATE_Q2_2024, form_type="10-Q"),
+        _FakeFact(2024, "Q2", "CashFlowStatement", FILING_DATE_Q2_2024, form_type="10-Q"),
+    ]
 
     def get_exchanges(self):
         return ["NASDAQ"]

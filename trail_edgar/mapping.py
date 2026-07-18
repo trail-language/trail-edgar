@@ -50,6 +50,7 @@ DIRECT_TAGS: dict[str, list[str]] = {
     "income.eps_diluted": ["EarningsPerShareDiluted", "DilutedEarningsLossPerShare"],
     "balance.total_assets": ["Assets", "AssetsTotal"],
     "balance.current_assets": ["AssetsCurrent"],
+    "balance.other_current_assets": ["OtherAssetsCurrent"],
     "balance.current_liabilities": ["LiabilitiesCurrent"],
     "balance.total_liabilities": ["Liabilities", "LiabilitiesTotal"],
     "balance.long_term_debt": [

@@ -1,20 +1,20 @@
 """EdgarSource: a Trail data source backed by SEC EDGAR via edgartools.
 
-Implements the full extended-tier contract (:class:`trail.source.ExtendedDataSource`):
-loads normalized annual (10-K) income, balance-sheet, and cash-flow figures for a
-configured set of tickers, reports which canonical fields it can supply, enumerates its
-universe, and describes its capabilities. Market price and market cap are declared
-unavailable, since SEC filings do not carry a price.
+Implements the :class:`trail.source.DataSource` contract: loads normalized annual (10-K)
+income, balance-sheet, and cash-flow figures for a configured set of tickers, reports which
+canonical fields it can supply, enumerates its universe, and describes its capabilities.
+Market price and market cap are declared unavailable, since SEC filings do not carry a price.
 """
 from __future__ import annotations
 
+import datetime as dt
 import os
 
 import polars as pl
 
 from trail.config import ConfigError
 from trail.country import to_iso3
-from trail.source import Capabilities, ExtendedDataSource, FieldInfo
+from trail.source import Capabilities, DataSource, FieldInfo, LoadRequest
 
 from trail_edgar import convert, mapping
 from trail_edgar import periods as period_util
@@ -28,6 +28,67 @@ _FIELD_NOTES = {
     "cash.stock_issued": "ProceedsFromIssuanceOfCommonStock; often null for buyback-heavy issuers",
     "income.weighted_average_shares_diluted": "raw WeightedAverageNumberOfDilutedSharesOutstanding",
 }
+
+# edgartools `FinancialFact.statement_type` values that back our income/balance/cash fields
+# (see edgar.entity.mappings_loader's statement_mappings data; cash flow is "CashFlowStatement",
+# not "CashFlow" - that shorter name is only used as the `statement_type` *argument* to the
+# statement builder, not the value stamped on facts).
+_STATEMENT_TYPES = frozenset({"IncomeStatement", "BalanceSheet", "CashFlowStatement"})
+
+# periodic-report forms whose filing date anchors a point-in-time coordinate; excludes 8-Ks and
+# other forms that may disclose the same figures earlier but aren't the 10-K/10-Q of record.
+_PERIODIC_FORMS = frozenset({"10-K", "10-Q"})
+
+
+def _fact_period_key(fact) -> tuple[int, int] | None:
+    """``(year, quarter)`` from a raw ``FinancialFact``'s own fiscal_year/fiscal_period -
+    quarter 0 for a fiscal year, 1-4 for a fiscal quarter - matching the key shape
+    :func:`trail_edgar.convert.period_key` parses from a statement column label. None when
+    either attribute is missing or unrecognized."""
+    fiscal_year = getattr(fact, "fiscal_year", None)
+    fiscal_period = getattr(fact, "fiscal_period", None)
+    if not fiscal_year or not fiscal_period:
+        return None
+    if fiscal_period == "FY":
+        return (int(fiscal_year), 0)
+    if len(fiscal_period) == 2 and fiscal_period[0] == "Q" and fiscal_period[1].isdigit():
+        return (int(fiscal_year), int(fiscal_period[1]))
+    return None
+
+
+def _filing_dates(company) -> dict[tuple[int, int], dt.datetime]:
+    """Per-period 10-K/10-Q filing date from the company's already-fetched XBRL facts.
+
+    ``company.facts`` is an ``edgar.Company`` ``cached_property``: by the time this runs,
+    ``_fetch_statements`` has already triggered (and cached) the same underlying fetch via
+    ``income_statement``/``balance_sheet``/``cashflow_statement``, so reading it here costs no
+    extra network round-trip. A fiscal period can appear in more than one filing (a later 10-K's
+    comparative disclosure repeats a prior period under a later filing date); the earliest
+    filing date is the period's original disclosure, so ``min`` recovers that rather than the
+    more recent restatement/comparative date.
+    """
+    facts = getattr(company, "facts", None)
+    if not facts:
+        return {}
+    out: dict[tuple[int, int], dt.datetime] = {}
+    for fact in facts:
+        if getattr(fact, "statement_type", None) not in _STATEMENT_TYPES:
+            continue
+        if getattr(fact, "form_type", None) not in _PERIODIC_FORMS:
+            continue
+        filing_date = getattr(fact, "filing_date", None)
+        if not filing_date:
+            continue
+        key = _fact_period_key(fact)
+        if key is None:
+            continue
+        value = filing_date if isinstance(filing_date, dt.datetime) else dt.datetime.combine(
+            filing_date, dt.time()
+        )
+        current = out.get(key)
+        if current is None or value < current:
+            out[key] = value
+    return out
 
 
 def _first_exchange(company) -> str | None:
@@ -67,7 +128,7 @@ def _country_of(company) -> str | None:
     return "USA" if code in _US_STATES else to_iso3(code)
 
 
-class EdgarSource(ExtendedDataSource):
+class EdgarSource(DataSource):
     """SEC EDGAR annual financial statements as a Trail panel."""
 
     name = "edgar"
@@ -92,8 +153,8 @@ class EdgarSource(ExtendedDataSource):
         self._universe = self.options.get("universe")
 
     # --- core tier ---
-    def load(self, fields: set[str], *, periods: tuple[int, int] | None = None,
-             entities: list[str] | None = None, frequency: str | None = None) -> pl.DataFrame:
+    def load(self, request: LoadRequest) -> pl.DataFrame:
+        fields, periods, frequency = request.fields, request.periods, request.frequency
         requested = {f for f in fields if f in mapping.PROVIDED_FIELDS}
         n_periods, bounds = period_util.year_bounds(self.options, periods)
         period = "quarterly" if frequency == "quarterly" else "annual"
@@ -101,13 +162,14 @@ class EdgarSource(ExtendedDataSource):
             n_periods *= 4  # the year bound counts years; 10-Q statements come per quarter
         # a caller-supplied universe (Trail's entities= seam) scopes the fetch, overriding
         # options.tickers / options.universe; otherwise fall back to the configured set.
-        tickers = [str(t).upper() for t in entities] if entities else self.entities()
+        tickers = [str(t).upper() for t in request.entities] if request.entities else self.entities()
         per_entity = []
         for ticker in tickers:
             company, statements = self._fetch_statements(ticker, n_periods, period)
             concepts = convert.concepts_from_statements(statements)
             meta = self._meta_for(company, requested)
-            per_entity.append((ticker, concepts, meta))
+            filing_dates = _filing_dates(company)
+            per_entity.append((ticker, concepts, meta, filing_dates))
         panel = convert.to_panel(per_entity, requested)
         if bounds is not None and panel.height:
             lo, hi = bounds
@@ -137,13 +199,18 @@ class EdgarSource(ExtendedDataSource):
             meta["meta.country"] = _country_of(company)
         return meta
 
-    # --- extended tier ---
-    def available_fields(self) -> set[str]:
+    def available_fields(self, frequency: str | None = None) -> set[str]:
         return set(mapping.PROVIDED_FIELDS)
 
     def describe_field(self, field: str) -> FieldInfo | None:
         if field in mapping.PROVIDED_FIELDS:
-            return FieldInfo(field, True, mapping.strategy_of(field), _FIELD_NOTES.get(field, ""))
+            # income/balance/cash fields are placed by 10-K/10-Q filing date (PIT-safe); meta
+            # fields (sector, exchange, country, ...) are current attributes, not filing-dated.
+            aligns_on = None if field in mapping.META_FIELDS else "filing_date"
+            return FieldInfo(
+                field, True, mapping.strategy_of(field), _FIELD_NOTES.get(field, ""),
+                aligns_on=aligns_on,
+            )
         if field in mapping.UNAVAILABLE_FIELDS:
             return FieldInfo(field, False, "unavailable", "SEC filings do not carry market price")
         return None
@@ -161,6 +228,7 @@ class EdgarSource(ExtendedDataSource):
             forms=("10-K", "10-Q"),
             provides_meta=True,
             provenance="SEC EDGAR via edgartools",
+            pit=True,
         )
 
     def close(self) -> None:
