@@ -216,3 +216,43 @@ def resolve_field(field: str, concepts: Concepts) -> Series:
         years = set(ltd) | set(std)
         return {y: ltd.get(y, 0.0) + std.get(y, 0.0) for y in years}
     return {}
+
+
+# --- source namespace (Approach X) --------------------------------------------------------------
+# Domain data (income/balance/cash) is owned by the `edgar` namespace; `meta.*` stays shared because
+# it carries the cross-source bridge key `meta.country`. The XBRL resolution above keeps the internal
+# canonical names; these translate only at the source boundary (available_fields / load / describe).
+NS = "edgar"
+
+
+def external(field: str) -> str:
+    """Boundary name: `income.revenue` -> `edgar.revenue`; `meta.*` unchanged (shared coordination)."""
+    if field.startswith("meta."):
+        return field
+    return f"{NS}.{field.split('.', 1)[1]}"
+
+
+_EXT_TO_INT: dict[str, str] = {external(f): f for f in PROVIDED_FIELDS}
+
+
+def to_internal(field: str) -> str | None:
+    """Internal canonical name for an external field, or None if this source does not provide it."""
+    return _EXT_TO_INT.get(field)
+
+
+def kind_of(field: str) -> str:
+    """Kind for a provided (internal) field. Under Approach X the source declares its own kinds -
+    the language ships no vocabulary. income->flow (eps per_share, share-counts stock); balance->stock;
+    cash->flow."""
+    domain, leaf = field.split(".", 1)
+    if domain == "balance":
+        return "stock"
+    if domain == "cash":
+        return "flow"
+    if domain == "income":
+        if leaf == "eps_diluted":
+            return "per_share"
+        if leaf.startswith("weighted_average_shares"):
+            return "stock"
+        return "flow"
+    return "meta"
