@@ -1,10 +1,22 @@
 from trail.schema import SCHEMA
 
 from trail_edgar import mapping
+from trail_edgar.schema_fields import SCHEMA as EDGAR_SCHEMA
 
 
-def test_provided_fields_match_schema_minus_price_and_market_cap():
-    assert mapping.PROVIDED_FIELDS == set(SCHEMA) - mapping.UNAVAILABLE_FIELDS
+def test_declared_edgar_namespace_matches_provided_domain_fields():
+    """Approach X: the source owns its vocabulary. What edgar DECLARES under `edgar.*` must be exactly
+    the domain fields it provides - `meta.*` stays language-owned (shared), price is unavailable."""
+    assert set(EDGAR_SCHEMA) == {
+        mapping.external(f) for f in mapping.PROVIDED_FIELDS - mapping.META_FIELDS
+    }
+
+
+def test_shared_meta_fields_are_language_owned():
+    """The `meta.*` fields edgar serves come from the language's shared coordination vocabulary
+    (the only namespace trail-lang still ships), not from edgar's own declaration."""
+    assert mapping.META_FIELDS <= set(SCHEMA)
+    assert not any(f.startswith("meta.") for f in EDGAR_SCHEMA)
 
 
 def test_direct_tag_priority():

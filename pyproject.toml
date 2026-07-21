@@ -1,6 +1,6 @@
 [project]
 name = "trail-edgar"
-version = "0.4.0"
+version = "0.5.0"
 description = "SEC EDGAR data source for Trail: normalized 10-K financial statements via edgartools"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "trail-lang>=0.13",
+    "trail-lang>=0.14",
     "edgartools>=5.42,<6",
     "polars>=1.20",
 ]
