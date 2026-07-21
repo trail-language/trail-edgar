@@ -28,6 +28,10 @@ dependencies = [
 [project.entry-points."trail.sources"]
 edgar = "trail_edgar:EdgarSource"
 
+# Declares the `edgar.*` field vocabulary (Approach X: the source owns its namespace).
+[project.entry-points."trail.schema"]
+edgar = "trail_edgar.schema_fields:SCHEMA"
+
 [project.urls]
 Homepage = "https://github.com/trail-language"
 Repository = "https://github.com/trail-language/trail-edgar"

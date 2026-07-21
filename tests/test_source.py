@@ -12,15 +12,15 @@ from trail_edgar.source import EdgarSource, _filing_dates
 
 def test_conforms_to_contract(edgar_source):
     fields = {
-        "income.revenue", "income.gross_profit", "cash.free_cash_flow",
-        "balance.total_debt", "cash.capex", "meta.sector", "meta.exchange",
+        "edgar.revenue", "edgar.gross_profit", "edgar.free_cash_flow",
+        "edgar.total_debt", "edgar.capex", "meta.sector", "meta.exchange",
     }
     assert_source_conforms(edgar_source, fields)
 
 
 def test_available_fields_excludes_price_and_market_cap(edgar_source):
     avail = edgar_source.available_fields()
-    assert "income.revenue" in avail
+    assert "edgar.revenue" in avail
     assert "price.adj_close" not in avail
     assert "meta.market_cap" not in avail
 
@@ -33,18 +33,18 @@ def test_describe_unavailable_field(edgar_source):
 def test_values_and_derivations(edgar_source):
     panel = edgar_source.load(
         LoadRequest(fields=frozenset({
-            "income.revenue", "income.gross_profit", "cash.free_cash_flow",
-            "balance.total_debt", "cash.capex", "meta.sector",
+            "edgar.revenue", "edgar.gross_profit", "edgar.free_cash_flow",
+            "edgar.total_debt", "edgar.capex", "meta.sector",
         }))
     )
     row = panel.filter(
         (pl.col("entity") == "AAA") & (pl.col("time").dt.year() == 2024)
     ).to_dicts()[0]
-    assert row["income.revenue"] == 1000.0
-    assert row["income.gross_profit"] == 400.0  # revenue - cogs
-    assert row["cash.free_cash_flow"] == 250.0  # cfo - abs(capex)
-    assert row["balance.total_debt"] == 700.0  # long + short term
-    assert row["cash.capex"] == 50.0  # abs
+    assert row["edgar.revenue"] == 1000.0
+    assert row["edgar.gross_profit"] == 400.0  # revenue - cogs
+    assert row["edgar.free_cash_flow"] == 250.0  # cfo - abs(capex)
+    assert row["edgar.total_debt"] == 700.0  # long + short term
+    assert row["edgar.capex"] == 50.0  # abs
     assert row["meta.sector"] == "Technology"
 
 
@@ -53,17 +53,17 @@ def test_securities_from_tickers(edgar_source):
 
 
 def test_entities_kwarg_overrides_configured_tickers(edgar_source):
-    panel = edgar_source.load(LoadRequest(fields=frozenset({"income.revenue"}), entities=("ccc",)))
+    panel = edgar_source.load(LoadRequest(fields=frozenset({"edgar.revenue"}), entities=("ccc",)))
     assert panel["entity"].unique().to_list() == ["CCC"]  # caller universe wins, normalized upper
 
 
 def test_load_without_entities_uses_configured_tickers(edgar_source):
-    panel = edgar_source.load(LoadRequest(fields=frozenset({"income.revenue"})))
+    panel = edgar_source.load(LoadRequest(fields=frozenset({"edgar.revenue"})))
     assert set(panel["entity"].unique().to_list()) == {"AAA", "BBB"}
 
 
 def test_meta_country_normalizes_us_state_to_iso3(edgar_source):
-    panel = edgar_source.load(LoadRequest(fields=frozenset({"income.revenue", "meta.country"})))
+    panel = edgar_source.load(LoadRequest(fields=frozenset({"edgar.revenue", "meta.country"})))
     assert panel["meta.country"].unique().to_list() == ["USA"]  # address "CA" -> USA
 
 
@@ -86,27 +86,27 @@ def test_period_bounds_filter(monkeypatch, statements):
     monkeypatch.setattr(
         EdgarSource, "_fetch_statements", lambda self, t, n, period="annual": (object(), statements)
     )
-    panel = src.load(LoadRequest(fields=frozenset({"income.revenue"})))
+    panel = src.load(LoadRequest(fields=frozenset({"edgar.revenue"})))
     assert panel["time"].dt.year().unique().to_list() == [2024]
 
 
 def test_new_field_mappings(edgar_source):
     panel = edgar_source.load(LoadRequest(fields=frozenset({
-        "income.ebitda", "income.depreciation_amortization", "income.sga",
-        "balance.net_fixed_assets", "balance.goodwill", "balance.minority_interest",
-        "cash.cfi", "cash.net_change_in_cash", "cash.dividends_paid",
+        "edgar.ebitda", "edgar.depreciation_amortization", "edgar.sga",
+        "edgar.net_fixed_assets", "edgar.goodwill", "edgar.minority_interest",
+        "edgar.cfi", "edgar.net_change_in_cash", "edgar.dividends_paid",
     })))
     row = panel.filter(
         (pl.col("entity") == "AAA") & (pl.col("time").dt.year() == 2024)
     ).to_dicts()[0]
-    assert row["income.depreciation_amortization"] == 40.0
-    assert row["income.ebitda"] == 240.0            # derived: operating income 200 + d&a 40
-    assert row["income.sga"] == 100.0
-    assert row["balance.net_fixed_assets"] == 900.0
-    assert row["balance.goodwill"] == 400.0
-    assert row["cash.cfi"] == -120.0                # signed flow
-    assert row["cash.net_change_in_cash"] == 100.0
-    assert row["cash.dividends_paid"] == 60.0       # abs of -60
+    assert row["edgar.depreciation_amortization"] == 40.0
+    assert row["edgar.ebitda"] == 240.0            # derived: operating income 200 + d&a 40
+    assert row["edgar.sga"] == 100.0
+    assert row["edgar.net_fixed_assets"] == 900.0
+    assert row["edgar.goodwill"] == 400.0
+    assert row["edgar.cfi"] == -120.0                # signed flow
+    assert row["edgar.net_change_in_cash"] == 100.0
+    assert row["edgar.dividends_paid"] == 60.0       # abs of -60
 
 
 def test_quarterly_load(monkeypatch, quarterly_statements):
@@ -118,12 +118,12 @@ def test_quarterly_load(monkeypatch, quarterly_statements):
         lambda self, t, n, period="annual": (conftest.FakeCompany(), quarterly_statements),
     )
     panel = src.load(
-        LoadRequest(fields=frozenset({"income.revenue", "income.net_income"}), frequency="quarterly")
+        LoadRequest(fields=frozenset({"edgar.revenue", "edgar.net_income"}), frequency="quarterly")
     ).sort("time")
     assert panel.height == 2
     # Q2 2024 -> 2024-06-30, Q3 2024 -> 2024-09-30 (calendar quarter-ends of the label year)
     assert [t.month for t in panel["time"].to_list()] == [6, 9]
-    assert panel["income.revenue"].to_list() == [250.0, 260.0]
+    assert panel["edgar.revenue"].to_list() == [250.0, 260.0]
 
 
 def test_identity_is_required(monkeypatch):
@@ -137,7 +137,7 @@ def test_capabilities_declares_pit(edgar_source):
 
 
 def test_statement_fields_align_on_filing_date_meta_is_naive(edgar_source):
-    for field in ("income.revenue", "balance.total_assets", "cash.cfo", "income.gross_profit"):
+    for field in ("edgar.revenue", "edgar.total_assets", "edgar.cfo", "edgar.gross_profit"):
         info = edgar_source.describe_field(field)
         assert info is not None and info.aligns_on == "filing_date"
     for field in ("meta.sector", "meta.exchange", "meta.country", "meta.is_active"):
@@ -148,7 +148,7 @@ def test_statement_fields_align_on_filing_date_meta_is_naive(edgar_source):
 def test_panel_carries_filing_date_coordinate(edgar_source):
     import conftest
 
-    panel = edgar_source.load(LoadRequest(fields=frozenset({"income.revenue", "meta.sector"})))
+    panel = edgar_source.load(LoadRequest(fields=frozenset({"edgar.revenue", "meta.sector"})))
     coord = date_col("filing_date")
     assert coord in panel.columns
     assert isinstance(panel.schema[coord], pl.Datetime)

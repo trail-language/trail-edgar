@@ -154,8 +154,9 @@ class EdgarSource(DataSource):
 
     # --- core tier ---
     def load(self, request: LoadRequest) -> pl.DataFrame:
-        fields, periods, frequency = request.fields, request.periods, request.frequency
-        requested = {f for f in fields if f in mapping.PROVIDED_FIELDS}
+        periods, frequency = request.periods, request.frequency
+        # request.fields arrive as external names (edgar.*, meta.*); resolve on internal names.
+        requested = {i for f in request.fields if (i := mapping.to_internal(f)) is not None}
         n_periods, bounds = period_util.year_bounds(self.options, periods)
         period = "quarterly" if frequency == "quarterly" else "annual"
         if period == "quarterly":
@@ -175,7 +176,10 @@ class EdgarSource(DataSource):
             lo, hi = bounds
             yr = pl.col("time").dt.year()
             panel = panel.filter((yr >= lo) & (yr <= hi))
-        return panel
+        # emit domain columns under the `edgar.*` namespace; meta.* / entity / time pass through.
+        renames = {c: mapping.external(c) for c in panel.columns
+                   if c in mapping.PROVIDED_FIELDS and mapping.external(c) != c}
+        return panel.rename(renames) if renames else panel
 
     def _fetch_statements(self, ticker: str, n_periods: int, period: str = "annual"):
         """Fetch the three statements for a ticker at `period` (the network seam)."""
@@ -200,15 +204,16 @@ class EdgarSource(DataSource):
         return meta
 
     def available_fields(self, frequency: str | None = None) -> set[str]:
-        return set(mapping.PROVIDED_FIELDS)
+        return {mapping.external(f) for f in mapping.PROVIDED_FIELDS}
 
     def describe_field(self, field: str) -> FieldInfo | None:
-        if field in mapping.PROVIDED_FIELDS:
+        internal = mapping.to_internal(field)
+        if internal is not None:
             # income/balance/cash fields are placed by 10-K/10-Q filing date (PIT-safe); meta
             # fields (sector, exchange, country, ...) are current attributes, not filing-dated.
-            aligns_on = None if field in mapping.META_FIELDS else "filing_date"
+            aligns_on = None if internal in mapping.META_FIELDS else "filing_date"
             return FieldInfo(
-                field, True, mapping.strategy_of(field), _FIELD_NOTES.get(field, ""),
+                field, True, mapping.strategy_of(internal), _FIELD_NOTES.get(internal, ""),
                 aligns_on=aligns_on,
             )
         if field in mapping.UNAVAILABLE_FIELDS:
