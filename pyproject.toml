@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "trail-lang>=0.14",
+    "trail-lang>=0.19",
     "edgartools>=5.42,<6",
     "polars>=1.20",
 ]
@@ -31,6 +31,10 @@ edgar = "trail_edgar:EdgarSource"
 # Declares the `edgar.*` field vocabulary (Approach X: the source owns its namespace).
 [project.entry-points."trail.schema"]
 edgar = "trail_edgar.schema_fields:SCHEMA"
+
+# Registers `trail init edgar`: the prompt fields + the canonical trail.yaml template.
+[project.entry-points."trail.init"]
+edgar = "trail_edgar.init_spec:EDGAR_INIT"
 
 [project.urls]
 Homepage = "https://github.com/trail-language"
